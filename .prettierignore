@@ -1,0 +1,5 @@
+# Ignore everything:
+/_templates/
+
+# Except myapp:
+!_templates/graphql-type/new/index.js
