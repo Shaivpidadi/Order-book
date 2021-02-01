@@ -1,0 +1,29 @@
+.card-background {
+  background-color: hsla(0, 0%, 39.2%, 0.1);
+}
+
+.order-container {
+  display: flex;
+  width: 100%;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  text-align: center;
+  color: white;
+}
+h1,
+h2 {
+  text-align: center;
+}
+td,
+th {
+  padding: 6px;
+}
+/* tr:nth-child(even) {
+  background-color: hsla(0, 0%, 39.2%, 0.1);
+} */
+
+tr:hover {
+  background-color: hsla(0, 0%, 39.2%, 0.1);
+}

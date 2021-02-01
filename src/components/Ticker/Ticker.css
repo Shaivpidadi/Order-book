@@ -1,0 +1,29 @@
+.ticker-container {
+  background-color: hsla(0, 0%, 39.2%, 0.1);
+  padding: 10px;
+  height: 100px;
+  align-items: center;
+}
+
+.ticker-logo {
+  height: 50px;
+  width: 50px;
+}
+
+.ticker-right {
+  color: white;
+  flex-flow: column;
+  align-items: flex-end;
+}
+
+.show-light {
+  opacity: 0.75;
+}
+
+.positive-green {
+  color: #16b157 !important;
+}
+
+.negative-red {
+  color: #f05359;
+}
