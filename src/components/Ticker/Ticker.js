@@ -57,8 +57,10 @@ const Ticker = () => {
         <div>BTC/USD</div>
         <div>
           <span className='show-light'>VOL </span>
-          <span>{!!tickerData ? formattedValue(tickerData[7]) : 0}</span>
-          <span className='show-light'> BTC</span>
+          <span style={{ fontSize: '14px' }}>
+            {!!tickerData ? formattedValue(tickerData[7] * tickerData[6]) : 0}
+          </span>
+          <span className='show-light'> USD</span>
         </div>
         <div>
           <span className='show-light'>LOW </span>

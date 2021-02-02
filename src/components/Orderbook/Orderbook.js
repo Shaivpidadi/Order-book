@@ -167,6 +167,22 @@ const OrderBook = () => {
     return res;
   }, [orderData]);
 
+  function cumulativeTotal(array) {
+    let sumData = [];
+    array.forEach((element) => {
+      sumData.push(element[2]);
+    });
+
+    let result = [sumData[0]];
+
+    for (let i = 1; i < array.length; i++) {
+      result[i] = result[i - 1] + sumData[i];
+    }
+
+    // return result;
+    return result;
+  }
+
   // This should be in different Component
   useEffect(() => {
     setTimeout(() => {
@@ -250,11 +266,13 @@ const OrderBook = () => {
                 tradingTo={currencyArray[0]}
                 tradingFrom={currencyArray[1]}
                 data={orderData?.bids || []}
+                total={cumulativeTotal(orderData?.bids || [])}
               />
               <OrderbookTable
                 tradingTo={currencyArray[0]}
                 tradingFrom={currencyArray[1]}
                 data={orderData?.asks || []}
+                total={cumulativeTotal(orderData?.asks || [])}
               />
             </div>
             <div
