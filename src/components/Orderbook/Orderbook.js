@@ -21,7 +21,7 @@ const OrderBook = () => {
   const currencyArray = currencyPair.toUpperCase().match(/.{1,3}/g);
 
   useEffect(() => {
-    const ws = new WebSocket('wss://api.bitfinex.com/ws/2');
+    const ws = new WebSocket('wss://api-pub.bitfinex.com/ws/2');
     if (toggleWebsocket) {
       ws.close();
     }
@@ -40,6 +40,7 @@ const OrderBook = () => {
           channel: 'book',
           symbol: 'tBTCUSD',
           prec: precision[precisionIndex],
+          freq: 'F1',
           len: 25,
         }),
       );
