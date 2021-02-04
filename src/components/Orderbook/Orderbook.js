@@ -4,6 +4,9 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCaretDown, faCaretUp, faMinus, faPlus } from '@fortawesome/free-solid-svg-icons';
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
+import _ from 'lodash';
+import moment from 'moment';
+import CRC from 'crc-32';
 
 import OrderbookTable from '../OrderbookTable/OrderbookTable';
 import './Orderbook.css';
@@ -11,36 +14,149 @@ import './Orderbook.css';
 const precision = ['P0', 'P1', 'P2', 'P3', 'P4'];
 const OrderBook = () => {
   const [toggleIcon, setToggleIcon] = useState(true);
-  const [orders, setOrders] = useState([]);
   const [orderData, setOrderData] = useState({ bids: [], asks: [] });
   const [precisionIndex, setPrecisionIndex] = useState(0);
   const [toggleWebsocket, setToggleWebsocket] = useState(false);
+  const [bookData, setBookData] = useState({});
 
   // This Will be Dynamic
   const currencyPair = 'btcusd';
   const currencyArray = currencyPair.toUpperCase().match(/.{1,3}/g);
 
   useEffect(() => {
+    const BOOK = {};
+    let seq = null;
+
     const ws = new WebSocket('wss://api-pub.bitfinex.com/ws/2');
     if (toggleWebsocket) {
       ws.close();
     }
     ws.onmessage = (msg) => {
-      const response = JSON.parse(msg?.data);
-      if (response[1] === 'hb') {
+      msg = JSON.parse(msg?.data);
+
+      if (msg.event) return;
+      if (msg[1] === 'hb') {
+        seq = +msg[2];
+        return;
+      } else if (msg[1] === 'cs') {
+        seq = +msg[3];
+
+        const checksum = msg[2];
+        const csdata = [];
+        const bids_keys = BOOK.psnap['bids'];
+        const asks_keys = BOOK.psnap['asks'];
+
+        for (let i = 0; i < 25; i++) {
+          if (bids_keys[i]) {
+            const price = bids_keys[i];
+            const pp = BOOK.bids[price];
+            csdata.push(pp.price, pp.amount);
+          }
+          if (asks_keys[i]) {
+            const price = asks_keys[i];
+            const pp = BOOK.asks[price];
+            csdata.push(pp.price, -pp.amount);
+          }
+        }
+
+        const cs_str = csdata.join(':');
+        const cs_calc = CRC.str(cs_str);
+
+        console.log('Not Found');
+        if (cs_calc !== checksum) {
+          console.error('CHECKSUM_FAILED');
+          process.exit(-1);
+        }
         return;
       }
-      setOrders(response[1]);
+      if (BOOK.mcnt === 0) {
+        _.each(msg[1], function (pp) {
+          pp = { price: pp[0], cnt: pp[1], amount: pp[2] };
+          const side = pp.amount >= 0 ? 'bids' : 'asks';
+          pp.amount = Math.abs(pp.amount);
+          if (BOOK[side][pp.price]) {
+            console.log('Not Found');
+          }
+          BOOK[side][pp.price] = pp;
+        });
+      } else {
+        const cseq = +msg[2];
+        msg = msg[1];
+
+        if (!seq) {
+          seq = cseq - 1;
+        }
+
+        if (cseq - seq !== 1) {
+          console.error('OUT OF SEQUENCE', seq, cseq);
+          process.exit();
+        }
+
+        seq = cseq;
+
+        let pp = { price: msg[0], cnt: msg[1], amount: msg[2] };
+
+        if (!pp.cnt) {
+          let found = true;
+
+          if (pp.amount > 0) {
+            if (BOOK['bids'][pp.price]) {
+              delete BOOK['bids'][pp.price];
+            } else {
+              found = false;
+            }
+          } else if (pp.amount < 0) {
+            if (BOOK['asks'][pp.price]) {
+              delete BOOK['asks'][pp.price];
+            } else {
+              found = false;
+            }
+          }
+
+          if (!found) {
+            console.log('Not Found');
+          }
+        } else {
+          let side = pp.amount >= 0 ? 'bids' : 'asks';
+          pp.amount = Math.abs(pp.amount);
+          BOOK[side][pp.price] = pp;
+        }
+      }
+
+      _.each(['bids', 'asks'], function (side) {
+        let sbook = BOOK[side];
+        let bprices = Object.keys(sbook);
+
+        let prices = bprices.sort(function (a, b) {
+          if (side === 'bids') {
+            return +a >= +b ? -1 : 1;
+          } else {
+            return +a <= +b ? -1 : 1;
+          }
+        });
+
+        BOOK.psnap[side] = prices;
+      });
+
+      BOOK.mcnt++;
+      // if (Object.values(BOOK.bids).length === 25 && Object.values(BOOK.asks).length === 25) {
+      setBookData({ ...bookData, ...BOOK });
+      // }
     };
 
     ws.onopen = () => {
+      BOOK.bids = {};
+      BOOK.asks = {};
+      BOOK.psnap = {};
+      BOOK.mcnt = 0;
+      ws.send(JSON.stringify({ event: 'conf', flags: 65536 + 131072 }));
+
       ws.send(
         JSON.stringify({
           event: 'subscribe',
           channel: 'book',
           symbol: 'tBTCUSD',
           prec: precision[precisionIndex],
-          freq: 'F1',
           len: 25,
         }),
       );
@@ -48,9 +164,12 @@ const OrderBook = () => {
 
     ws.onclose = () => {
       ws.close();
+      seq = null;
+      console.log({ BOOK });
     };
 
     return () => {
+      seq = null;
       ws.close();
     };
   }, [currencyPair, precisionIndex, toggleWebsocket]);
@@ -77,36 +196,6 @@ const OrderBook = () => {
     e.stopPropagation();
     setToggleWebsocket(!toggleWebsocket);
   };
-
-  useEffect(() => {
-    if (!!orders && orders?.length > 0) {
-      if (orders?.length === 50) {
-        setOrderData({
-          ...orderData,
-          bids: orders.slice(0, 24),
-          asks: orders.slice(-24),
-        });
-      } else if (orderData.bids.length > 0 && orderData.asks.length > 0) {
-        if (orders[2] > 0) {
-          const allBids = new Array(orderData.bids.reverse());
-          const allAsks = new Array(orderData.asks.reverse());
-          let bids = allBids;
-          if (bids[0]?.length >= 25) {
-            bids[0].shift();
-          }
-          setOrderData({ asks: [...allAsks[0]], bids: [orders, ...bids[0]] });
-        } else {
-          const allBids = new Array(orderData.bids.reverse());
-          const allAsks = new Array(orderData.asks.reverse());
-          let asks = allAsks;
-          if (asks[0]?.length >= 25) {
-            asks[0].shift();
-          }
-          setOrderData({ asks: [orders, ...asks[0]], bids: [...allBids[0]] });
-        }
-      }
-    }
-  }, [orders]);
 
   const chartData = useMemo(() => {
     function processData(list, type, desc) {
@@ -168,20 +257,41 @@ const OrderBook = () => {
     return res;
   }, [orderData]);
 
-  function cumulativeTotal(array) {
-    let sumData = [];
-    array.forEach((element) => {
-      sumData.push(element[2]);
-    });
+  function cumulativeTotal(obj, isAsk) {
+    let array;
+    console.log({ obj });
+    if (Object.keys(obj).length > 0) {
+      if (isAsk) {
+        // array = _.map(Object.values(obj.bids), 'amount');
+        array = Object.values(obj.bids).filter(({ amount }) => amount);
+      } else {
+        array = Object.values(obj.asks).filter(({ amount }) => amount);
+      }
 
-    let result = [sumData[0]];
+      console.log('array', array, array.length);
 
-    for (let i = 1; i < array.length; i++) {
-      result[i] = result[i - 1] + sumData[i];
+      if (array.length < 25) {
+        console.log('Bids', Object.values(obj.bids).length);
+        console.log('Asks', Object.values(obj.asks).length);
+      }
+
+      let sumData = [];
+      array.forEach((element) => {
+        sumData.push(parseFloat(element));
+      });
+
+      let result = [sumData[0]];
+
+      for (let i = 1; i < array.length; i++) {
+        result[i] = result[i - 1] + sumData[i];
+      }
+
+      // return result;
+      console.log({ result });
+      return result;
+    } else {
+      console.log('In else');
     }
-
-    // return result;
-    return result;
   }
 
   // This should be in different Component
@@ -263,20 +373,10 @@ const OrderBook = () => {
         <Accordion.Collapse eventKey='0'>
           <Card.Body>
             <div className='order-container' style={{ backgroundColor: 'transparent' }}>
-              <OrderbookTable
-                tradingTo={currencyArray[0]}
-                tradingFrom={currencyArray[1]}
-                data={orderData?.bids || []}
-                total={cumulativeTotal(orderData?.bids || [])}
-              />
-              <OrderbookTable
-                tradingTo={currencyArray[0]}
-                tradingFrom={currencyArray[1]}
-                data={orderData?.asks || []}
-                total={cumulativeTotal(orderData?.asks || [])}
-              />
+              <OrderbookTable data={bookData?.bids || {}} />
+              <OrderbookTable data={bookData?.asks || {}} isReversed />
             </div>
-            <div
+            {/* <div
               id='chartdiv'
               style={{
                 width: '100%',
@@ -287,7 +387,7 @@ const OrderBook = () => {
                 opacity: 0.3,
                 zIndex: -3,
               }}
-            ></div>
+            ></div> */}
           </Card.Body>
         </Accordion.Collapse>
       </Card>
