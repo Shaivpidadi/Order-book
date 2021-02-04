@@ -65,7 +65,7 @@ const OrderBook = () => {
         console.log('Not Found');
         if (cs_calc !== checksum) {
           console.error('CHECKSUM_FAILED');
-          process.exit(-1);
+          return;
         }
         return;
       }
@@ -157,6 +157,7 @@ const OrderBook = () => {
           channel: 'book',
           symbol: 'tBTCUSD',
           prec: precision[precisionIndex],
+          freq: 'F1',
           len: 25,
         }),
       );

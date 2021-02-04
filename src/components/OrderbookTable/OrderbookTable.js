@@ -12,6 +12,7 @@ const formattedValue = (value, fractionDigit = 0) => {
 
 const OrderbookTable = ({ data, isReversed }) => {
   let buyAmountSum = 0;
+
   return (
     <table>
       <thead>
@@ -33,20 +34,22 @@ const OrderbookTable = ({ data, isReversed }) => {
       </thead>
       <tbody>
         {!isReversed
-          ? Object.values(data).map((item, index) => {
-              if (item.amount > 0) {
-                buyAmountSum += item.amount;
-              }
+          ? Object.values(data)
+              .reverse()
+              .map((item, index) => {
+                if (item.amount > 0) {
+                  buyAmountSum += item.amount;
+                }
 
-              return (
-                <tr key={index}>
-                  <td> {formattedValue(item.cnt)} </td>
-                  <td> {formattedValue(item.amount, 4)} </td>
-                  <td> {buyAmountSum.toFixed(3)} </td>
-                  <td> {formattedValue(item.price)} </td>
-                </tr>
-              );
-            })
+                return (
+                  <tr key={index}>
+                    <td> {formattedValue(item.cnt)} </td>
+                    <td> {formattedValue(item.amount, 4)} </td>
+                    <td> {buyAmountSum.toFixed(4)} </td>
+                    <td> {formattedValue(item.price)} </td>
+                  </tr>
+                );
+              })
           : Object.values(data).map((item, index) => {
               if (item.amount > 0) {
                 buyAmountSum += item.amount;
@@ -55,7 +58,7 @@ const OrderbookTable = ({ data, isReversed }) => {
               return (
                 <tr key={index}>
                   <td> {formattedValue(item.price)} </td>
-                  <td> {buyAmountSum.toFixed(3)} </td>
+                  <td> {buyAmountSum.toFixed(4)} </td>
                   <td> {formattedValue(item.amount, 4)} </td>
                   <td> {formattedValue(item.cnt)} </td>
                 </tr>
