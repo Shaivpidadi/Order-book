@@ -5,7 +5,6 @@ import { faCaretDown, faCaretUp, faMinus, faPlus } from '@fortawesome/free-solid
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import _ from 'lodash';
-import moment from 'moment';
 import CRC from 'crc-32';
 
 import OrderbookTable from '../OrderbookTable/OrderbookTable';
@@ -62,9 +61,8 @@ const OrderBook = () => {
         const cs_str = csdata.join(':');
         const cs_calc = CRC.str(cs_str);
 
-        console.log('Not Found');
         if (cs_calc !== checksum) {
-          console.error('CHECKSUM_FAILED');
+          console.log('CHECKSUM_FAILED');
           return;
         }
         return;
@@ -88,8 +86,8 @@ const OrderBook = () => {
         }
 
         if (cseq - seq !== 1) {
-          console.error('OUT OF SEQUENCE', seq, cseq);
-          process.exit();
+          console.error('Wrong Seq');
+          return;
         }
 
         seq = cseq;
@@ -139,9 +137,7 @@ const OrderBook = () => {
       });
 
       BOOK.mcnt++;
-      // if (Object.values(BOOK.bids).length === 25 && Object.values(BOOK.asks).length === 25) {
       setBookData({ ...bookData, ...BOOK });
-      // }
     };
 
     ws.onopen = () => {
@@ -166,7 +162,6 @@ const OrderBook = () => {
     ws.onclose = () => {
       ws.close();
       seq = null;
-      console.log({ BOOK });
     };
 
     return () => {
@@ -201,15 +196,16 @@ const OrderBook = () => {
   const chartData = useMemo(() => {
     function processData(list, type, desc) {
       // Convert to data points
-      for (let i = 0; i < list.length; i++) {
-        list[i] = {
-          value: Number(list[i][0]),
-          volume: Math.abs(Number(list[i][2] * list[i][0])),
-        };
-      }
+      const chartPoints = [];
+      Object.values(list).map((item, index) => {
+        chartPoints.push({
+          value: Number(item.price),
+          volume: Math.abs(parseInt(item.price) * parseInt(item.amount)),
+        });
+      });
 
       // Sort list just in case
-      list.sort(function (a, b) {
+      chartPoints.sort(function (a, b) {
         if (a.value > b.value) {
           return 1;
         } else if (a.value < b.value) {
@@ -221,79 +217,41 @@ const OrderBook = () => {
 
       // Calculate cummulative volume
       if (desc) {
-        for (let i = list.length - 1; i >= 0; i--) {
-          if (i < list.length - 1) {
-            list[i].totalvolume = list[i + 1].totalvolume + list[i].volume;
+        for (let i = chartPoints.length - 1; i >= 0; i--) {
+          if (i < chartPoints.length - 1) {
+            chartPoints[i].totalvolume = chartPoints[i + 1].totalvolume + chartPoints[i].volume;
           } else {
-            list[i].totalvolume = list[i].volume;
+            chartPoints[i].totalvolume = chartPoints[i].volume;
           }
           let dp = {};
-          dp['value'] = list[i].value;
-          dp[type + 'volume'] = list[i].volume;
-          dp[type + 'totalvolume'] = list[i].totalvolume;
+          dp['value'] = chartPoints[i].value;
+          dp[type + 'volume'] = chartPoints[i].volume;
+          dp[type + 'totalvolume'] = chartPoints[i].totalvolume;
           res.unshift(dp);
         }
       } else {
-        for (let i = 0; i < list.length; i++) {
+        for (let i = 0; i < chartPoints.length; i++) {
           if (i > 0) {
-            list[i].totalvolume = list[i - 1].totalvolume + list[i].volume;
+            chartPoints[i].totalvolume = chartPoints[i - 1].totalvolume + chartPoints[i].volume;
           } else {
-            list[i].totalvolume = list[i].volume;
+            chartPoints[i].totalvolume = chartPoints[i].volume;
           }
           let dp = {};
-          dp['value'] = list[i].value;
-          dp[type + 'volume'] = list[i].volume;
-          dp[type + 'totalvolume'] = list[i].totalvolume;
+          dp['value'] = chartPoints[i].value;
+          dp[type + 'volume'] = chartPoints[i].volume;
+          dp[type + 'totalvolume'] = chartPoints[i].totalvolume;
           res.push(dp);
         }
       }
     }
     // Init
     let res = [];
-    let bids = [...orderData.bids];
-    let asks = [...orderData.asks];
-    processData(bids, 'bids', true);
-    processData(asks, 'asks', false);
-
-    return res;
-  }, [orderData]);
-
-  function cumulativeTotal(obj, isAsk) {
-    let array;
-    console.log({ obj });
-    if (Object.keys(obj).length > 0) {
-      if (isAsk) {
-        // array = _.map(Object.values(obj.bids), 'amount');
-        array = Object.values(obj.bids).filter(({ amount }) => amount);
-      } else {
-        array = Object.values(obj.asks).filter(({ amount }) => amount);
-      }
-
-      console.log('array', array, array.length);
-
-      if (array.length < 25) {
-        console.log('Bids', Object.values(obj.bids).length);
-        console.log('Asks', Object.values(obj.asks).length);
-      }
-
-      let sumData = [];
-      array.forEach((element) => {
-        sumData.push(parseFloat(element));
-      });
-
-      let result = [sumData[0]];
-
-      for (let i = 1; i < array.length; i++) {
-        result[i] = result[i - 1] + sumData[i];
-      }
-
-      // return result;
-      console.log({ result });
-      return result;
-    } else {
-      console.log('In else');
+    if (Object.keys(bookData).length > 0) {
+      processData(bookData?.bids, 'bids', true);
+      processData(bookData?.asks, 'asks', false);
     }
-  }
+    return res;
+  }, [bookData]);
 
   // This should be in different Component
   useEffect(() => {
@@ -308,6 +266,7 @@ const OrderBook = () => {
       // Create axes
       let xAxis = chart.xAxes.push(new am4charts.CategoryAxis());
       xAxis.dataFields.category = 'value';
+      xAxis.min = 500;
       xAxis.renderer.labels.template.disabled = true;
 
       let yAxis = chart.yAxes.push(new am4charts.ValueAxis());
@@ -372,12 +331,12 @@ const OrderBook = () => {
           </Accordion.Toggle>
         </Card.Header>
         <Accordion.Collapse eventKey='0'>
-          <Card.Body>
+          <Card.Body style={{ height: '100vh' }}>
             <div className='order-container' style={{ backgroundColor: 'transparent' }}>
               <OrderbookTable data={bookData?.bids || {}} />
               <OrderbookTable data={bookData?.asks || {}} isReversed />
             </div>
-            {/* <div
+            <div
               id='chartdiv'
               style={{
                 width: '100%',
@@ -388,7 +347,7 @@ const OrderBook = () => {
                 opacity: 0.3,
                 zIndex: -3,
               }}
-            ></div> */}
+            ></div>
           </Card.Body>
         </Accordion.Collapse>
       </Card>
